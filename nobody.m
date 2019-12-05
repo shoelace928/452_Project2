@@ -8,6 +8,22 @@
 %propagation method: enckes, ensures that time step is converted to days to
 %find position of the bodies 
 
+clear all; close all; clc;
+
+%constants:
+mu_e = 398600 ; %km3/s2
+
+%Hw4 Test: 
+%HEO Orbit Graphs 
+% h = 69084.1 ; 
+% ecc = .741 ;
+% RAAN = deg2rad(2*pi) ; 
+% inc = deg2rad(63.4) ;
+% arg = deg2rad(270) ; 
+% theta = deg2rad(0) ; 
+% a = 26553.4 ; 
+% T = 11.9616*60 ; %sec
+
 coes = [h ecc RAAN inc arg theta] ;
 tf = 60*24*3600 ; 
 [r, v] = sv_coes(coes,mu_e) ;
@@ -16,6 +32,26 @@ dt = 300 ; %time step in seconds
     for mm = 1:length(R_enc(1,:)) 
       [henc(mm), incenc(mm), RAANenc(mm), argenc(mm), eccenc(mm), raenc(mm), rpenc(mm)] = state2coes(R_enc(1:3,mm), V_enc(1:3,mm), mu_e) ;
     end 
+
+% figure(1) 
+% subplot(1,3,1)
+% plot((tt/(24*3600)),(rad2deg(RAANenc)-rad2deg(RAAN)))
+% title('HEO: Change in RAAN')
+% xlabel('Time (Days)')
+% ylabel('Degrees')
+% axis([0 60 -.25 0])
+% subplot(1,3,2)
+% plot((tt/(24*3600)),rad2deg(incenc)-rad2deg(inc))
+% title('HEO: Change in Inclination')
+% xlabel('Time (Days)')
+% ylabel('Degrees')
+% axis([0 60 -.005 .025])
+% subplot(1,3,3)
+% plot((tt/(24*3600)),rad2deg(argenc)-rad2deg(arg))
+% title('HEO: Change in Argument of Perigee')
+% xlabel('Time (Days)')
+% ylabel('Degrees')
+% axis([0 60 -.02 .12])
 
     %Enckes Method With Perturbations -- N Body
 function [R, V, tt] = enckesnb(R, R_osc, V, V_osc, dro, dvo, dt, tf, mu_e)  
