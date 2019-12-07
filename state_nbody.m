@@ -1,33 +1,85 @@
+%% Notes to self
+
+%Add SRP Perterbations
+
 %% Part 1 - Propagation
 
 clear all; close all; clc; 
 mu_e = 398600 ; 
-tspan = 720*24*3600 ; %sec
+W = [0 0 72.9211e-6]';  %angular velocity of the earth (rad/s)
+r_e = 6378;             %radius of the Earth (km)
+tspan = 100*24*3600 ; %sec
 options = odeset('RelTol', 1e-8, 'AbsTol', 1e-8) ;
 
 %% Iridium - Drag, N-Body, Oblateness, 
 RI = [-4351.6; -5661.3; 15.3] ;
 VI = [.3814; -.2730; 7.4567] ;
 stateI = [RI VI] ;
-[RI, VI] = sv_coes(coes,mu_e) ;
+A_i = 19.25;   %m^2
+m_i = 860;  %kg
 
-    %N-Body
-dt = 300 ; %time step in seconds 
-[RI2, VI2, tt, dcoesI] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], dt, tspan, mu_e)  ;
+%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6
+onoff = [1 1 1 1 1 1 1];
 
+dt = 100 ; %time step in seconds 
+[RI2, VI2, tt, dcoesI] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e)  ;
+
+figure(1)
+earth_sphere
+hold on
+plot3(RI2(1,:),RI2(2,:),RI2(3,:))
+grid on
+title('Iridium Propagation')
 
 %% COSMOS - N-body, Oblateness, SRP 
 RC = [-10401; 39485; 10622] ;
 VC = [-2.9744; -.7741; -.0349] ;
 stateC = [RC VC] ;
+A_c = 40.48;  %m^2
+m_c = 1700;  %kg
 
-    %N-Body
-dt = 300 ; %time step in seconds 
-[RC2, VC2, tt, dcoesC] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], dt, tspan, mu_e)  ;
+%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6
+onoff = [1 0 1 1 1 1 1];
 
-% Functions: 
-    %Enckes Method With Perturbations -- N Body
-function [R, V, tt] = enckesnb(R, R_osc, V, V_osc, dro, dvo, dt, tf, mu_e)  
+dt = 100 ; %time step in seconds 
+[RC2, VC2, tt, dcoesC] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], dt, ...
+    tspan, mu_e, onoff, W, A_c, m_c, r_e)  ;
+
+figure(2)
+earth_sphere
+hold on
+plot3(RC2(1,:),RC2(2,:),RC2(3,:))
+grid on
+title('Iridium Propagation')
+
+%% RADARSAT-2 - N-Body, Oblateness, SRP, Drag
+RR = [-2213.2 88.2 6819.2]';
+VR = [-6.0621 3.8439 -2.0172]';
+
+stateR = [RR VR] ;
+A_r = 15.18;  %m^2
+m_r = 2200;  %kg
+
+%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6
+onoff = [1 1 0 1 1 1 1];
+
+dt = 100 ; %time step in seconds 
+[RR2, VR2, tt, dcoesR] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], dt, ...
+    tspan, mu_e, onoff, W, A_r, m_r, r_e)  ;
+
+figure(3)
+earth_sphere
+hold on
+plot3(RR2(1,:),RR2(2,:),RR2(3,:))
+grid on
+title('Iridium Propagation')
+
+
+%% Functions: 
+    %Enckes Method With Perturbations -- N Body -- Drag -- J2-6
+function [R, V, tt, dcoes] = enckesnb(R, R_osc, V, V_osc, dro, dvo, dt, tf, ...
+    mu_e, onoff, omega_e, A_sc, m, r_e)  
 ii = 1; 
 tt(ii) = 0 ;  
 rectify = 1 ; 
@@ -45,6 +97,13 @@ while ii < 10E5 && tt(ii) < tf
     dr(:,1) = dro ; 
     dv(:,1) = dvo ; 
 
+        %J Constants
+    J2 = 0.00108263;
+    J3 = (-2.53266e-6)*J2;
+    J4 = (-1.619e-6)*J2;
+    J5 = (-2.273e-7)*J2;
+    J6 = (5.407e-7)*J2; 
+    
         %Julian Date Calculation   
     JDo = 2451838 ; %initial start time 
     JDf = JDo + (tt(ii)/(24*3600)) ; %JDf will be 60 days from JDo
@@ -85,14 +144,83 @@ while ii < 10E5 && tt(ii) < tf
     qV = dot(R(:,ii),((2*rV)-R(:,ii)))/(norm(rV)^2) ; 
     FV = (((qV^2) - (3*qV) + 3)/(1 + (1 - qV)^(3/2))) * qV ;
     
-    ap(:,ii) = (mu_s*((Fs*rsun)-R(:,ii)))/(norm(Rss)^3) + ...
+        %Drag Perterbations
+    vrel = (dr(:,ii) - cross(omega_e,R_osc(:,ii)))*10^3;   %relative velocity (m/s)
+    CD = 2.2;                               %coefficient of drag
+
+    altell = (r_osc(ii)-6378);        %elliptical altitude (m)
+    rho = atmosphere(altell);       %kg/m^3
+
+    a_drag(:,ii) = -(1/2)*CD*(A_sc/m)*rho*(norm(vrel)^2)*vrel/norm(vrel); %ECI (m/s^2)
+    a_drag(:,ii) = a_drag(:,ii)*10^-3;      %km/s^2
+    
+        %J2-J6 Perterbations
+    %J2 perterbations
+    a_J2(1,ii) = -(3*J2*mu_e*r_e^2*R_osc(1,ii))/(2*r_osc(ii)^5)*(1 - ...
+        ((5*R_osc(3,ii)^2)/r_osc(ii)^2));
+    a_J2(2,ii) = -(3*J2*mu_e*r_e^2*R_osc(2,ii))/(2*r_osc(ii)^5)*(1 - ...
+        ((5*R_osc(3,ii)^2)/r_osc(ii)^2));
+    a_J2(3,ii) = -(3*J2*mu_e*r_e^2*R_osc(3,ii))/(2*r_osc(ii)^5)*(3 - ...
+        ((5*R_osc(3,ii)^2)/r_osc(ii)^2));
+%     temp = -((3*J2*mu_e*(r_e^2))/(2*r_osc(ii)^5)); 
+%     aI = temp*R_osc(1,ii)*(1 - ((5*R_osc(3,ii)^2)/(r_osc(ii)^2)));
+%     aJ = temp*R_osc(2,ii)*(1 - ((5*R_osc(3,ii)^2)/(r_osc(ii)^2)));
+%     aK = temp*R_osc(3,ii)*(3 - ((5*R_osc(3,ii)^2)/(r_osc(ii)^2)));
+%     a_J2(:,ii) = [aI , aJ , aK]';
+
+    %J3 perterbations
+    a_J3(1,ii) = -(5*J3*mu_e*r_e^3*R_osc(1,ii)/(2*r_osc(ii)^7))*(3*R_osc(3,ii) ...
+        - (7*R_osc(3,ii)^3)/r_osc(ii)^2);
+    a_J3(2,ii) = -(5*J3*mu_e*r_e^3*R_osc(2,ii)/(2*r_osc(ii)^7))*(3*R_osc(3,ii) ...
+        - (7*R_osc(3,ii)^3)/r_osc(ii)^2);
+    a_J3(3,ii) = -(5*J3*mu_e*r_e^3/(2*r_osc(ii)^7))*(6*R_osc(3,ii)^2 ...
+        - ((7*R_osc(3,ii)^4)/r_osc(ii)^2) - (3*r_osc(ii)^2)/5);
+
+    %J4 perterbations
+    a_J4(1,ii) = (15*J4*mu_e*r_e^4*R_osc(1,ii)/(8*r_osc(ii)^7))*(1-...
+        (14*R_osc(3,ii)^2)/r_osc(ii)^2 + (21*R_osc(3,ii)^4)/r_osc(ii)^4);
+    a_J4(2,ii) = (15*J4*mu_e*r_e^4*R_osc(2,ii)/(8*r_osc(ii)^7))*(1-...
+        (14*R_osc(3,ii)^2)/r_osc(ii)^2 + (21*R_osc(3,ii)^4)/r_osc(ii)^4);
+    a_J4(3,ii) = (15*J4*mu_e*r_e^4*R_osc(3,ii)/(8*r_osc(ii)^7))*(5-...
+        (70*R_osc(3,ii)^2)/(3*r_osc(ii)^2) + (21*R_osc(3,ii)^4)/r_osc(ii)^4);
+
+    %J5 perterbations
+    a_J5(1,ii) = (3*J5*mu_e*r_e^5*R_osc(1,ii)*R_osc(3,ii)/(8*r_osc(ii)^9))*(35-...
+        210*R_osc(3,ii)^2/r_osc(ii)^2 + 231*R_osc(3,ii)^4/r_osc(ii)^4);
+    a_J5(2,ii) = (3*J5*mu_e*r_e^5*R_osc(2,ii)*R_osc(3,ii)/(8*r_osc(ii)^9))*(35-...
+        210*R_osc(3,ii)^2/r_osc(ii)^2 + 231*R_osc(3,ii)^4/r_osc(ii)^4);
+    a_J5(3,ii) = (3*J5*mu_e*r_e^5*R_osc(3,ii)^2/(8*r_osc(ii)^9))*(35-...
+        210*R_osc(3,ii)^2/r_osc(ii)^2 + 231*R_osc(3,ii)^4/r_osc(ii)^4) -...
+        15*J5*mu_e*r_e^5/(8*r_osc(ii)^7);
+
+    %J6 perterbations
+    a_J6(1,ii) = (-J6*mu_e*r_e^6*R_osc(1,ii)/(16*r_osc(ii)^9))*(35-...
+        945*R_osc(3,ii)/r_osc(ii)^2 + 3465*R_osc(3,ii)^4/r_osc(ii)^4 -...
+        3003*R_osc(3,ii)^6/r_osc(ii)^6);
+    a_J6(2,ii) = (-J6*mu_e*r_e^6*R_osc(2,ii)/(16*r_osc(ii)^9))*(35-...
+        945*R_osc(3,ii)/r_osc(ii)^2 + 3465*R_osc(3,ii)^4/r_osc(ii)^4 -...
+        3003*R_osc(3,ii)^6/r_osc(ii)^6);
+    a_J6(3,ii) = (-J6*mu_e*r_e^6*R_osc(3,ii)/(16*r_osc(ii)^9))*(245-...
+        2205*R_osc(3,ii)/r_osc(ii)^2 + 4851*R_osc(3,ii)^4/r_osc(ii)^4 -...
+        3003*R_osc(3,ii)^6/r_osc(ii)^6);
+
+        %Total Perterbations    
+    a_n(:,ii) = ((mu_s*((Fs*rsun)-R(:,ii)))/(norm(Rss)^3) + ...
         (mu_J*((FJ*rJ)-R(:,ii)))/(norm(RssJ)^3) + ...
-        (mu_V*((FV*rV)-R(:,ii)))/(norm(RssV)^3) ;
+        (mu_V*((FV*rV)-R(:,ii)))/(norm(RssV)^3));
+    
+    ap(:,ii) = a_n(:,ii)*onoff(1) + ...
+        a_drag(:,ii)*onoff(2) +...
+        a_J2(:,ii)*onoff(3) + ...
+        a_J3(:,ii)*onoff(4) + ...
+        a_J4(:,ii)*onoff(5) + ...
+        a_J5(:,ii)*onoff(6) + ...
+        a_J6(:,ii)*onoff(7);
  
     q = dot(dr(:,ii),((2*R(:,ii))-dr(:,ii)))/(r(ii)^2) ; 
     F = (((q^2) - (3*q) + 3)/(1 + (1 - q)^(3/2))) * q ; 
 
-    da(:,ii) = ((-mu_e*(dr(:,ii) - (F*R(:,ii))))/(r_osc(ii)^3)) + ap(:,ii) ;
+    da(:,ii+1) = ((-mu_e*(dr(:,ii) - (F*R(:,ii))))/(r_osc(ii)^3)) + ap(:,ii) ;
     dv(:,ii+1) = (da(:,ii)*dt) + dv(:,ii) ; 
     dr(:,ii+1) = (.5*da(:,ii)*dt^2) + (dv(:,ii)*dt) + dr(:,ii) ;
  
@@ -420,4 +548,162 @@ function [rsun,rtasc,decl] = sun ( jd )
             rtasc= rtasc + 0.5 *pi*round( (eclplong-rtasc)/(0.5 *pi));
         end
         decl = asin( sin(obliquity)*sin(eclplong) );
+end
+
+%Curtis' Standard Atmosphere Exponential Interpolation
+function rho = atmosphere(z)
+%inputs: altitude (km)
+%outputs: density (kg/m^3)
+
+%Altitudes (km)
+h = [ 0 25 30 40 50 60 70 80 90 100 110 120 130 140 150 180 200 250 ...
+    300 350 400 450 500 600 700 800 900 1000 ];
+
+%Corresponding Densities (kg/m^3)
+r = [ 1.225 4.008e-2 1.841e-2 3.996e-3 1.027e-3 3.097e-4 8.283e-5 ...
+    1.846e-5 3.416e-6 5.606e-7 9.708e-8 2.222e-8 8.152e-9 3.831e-9 ...
+    2.076e-9 5.194e-10 2.541e-10 6.073e-11 1.916e-11 7.014e-12 2.803e-12 ...
+    1.184e-12 5.215e-13 1.137e-13 3.07e-14 1.136e-14 5.759e-15 3.561e-15 ];
+
+%Scale Height (km)
+H = [ 7.31 6.427 6.546 7.36 8.342 7.583 6.661 5.927 5.533 5.703 6.782 ...
+    9.973 13.243 16.322 21.652 27.974 34.934 43.342 49.755 54.513 ...
+    58.019 60.98 65.654 76.377 100.587 147.203 208.02 ];
+
+%If altitude is outside of the range
+if z > 1000
+    z = 1000;
+elseif z < 0
+    z = 0;
+end
+
+%Interpolation Interval
+for j = 1:27
+    if z >= h(j) && z < h(j+1)
+        i = j;
+    end
+end
+if z >= 1000
+    i = 27;
+end
+
+%Exponential Interpolation
+rho = r(i)*exp(-(z-h(i))/H(i));
+
+end
+
+function [xx,yy,zz] = earth_sphere(varargin)
+%EARTH_SPHERE Generate an earth-sized sphere.
+%   [X,Y,Z] = EARTH_SPHERE(N) generates three (N+1)-by-(N+1)
+%   matrices so that SURFACE(X,Y,Z) produces a sphere equal to 
+%   the radius of the earth in kilometers. The continents will be
+%   displayed.
+%
+%   [X,Y,Z] = EARTH_SPHERE uses N = 50.
+%
+%   EARTH_SPHERE(N) and just EARTH_SPHERE graph the earth as a 
+%   SURFACE and do not return anything.
+%
+%   EARTH_SPHERE(N,'mile') graphs the earth with miles as the unit rather
+%   than kilometers. Other valid inputs are 'ft' 'm' 'nm' 'miles' and 'AU'
+%   for feet, meters, nautical miles, miles, and astronomical units
+%   respectively.
+%
+%   EARTH_SPHERE(AX,...) plots into AX instead of GCA.
+% 
+%  Examples: 
+%    earth_sphere('nm') produces an earth-sized sphere in nautical miles
+%
+%    earth_sphere(10,'AU') produces 10 point mesh of the Earth in
+%    astronomical units
+%
+%    h1 = gca;
+%    earth_sphere(h1,'mile')
+%    hold on
+%    plot3(x,y,z)
+%      produces the Earth in miles on axis h1 and plots a trajectory from
+%      variables x, y, and z
+%   Clay M. Thompson 4-24-1991, CBM 8-21-92.
+%   Will Campbell, 3-30-2010
+%   Copyright 1984-2010 The MathWorks, Inc. 
+%% Input Handling
+[cax,args,nargs] = axescheck(varargin{:}); % Parse possible Axes input
+error(nargchk(0,2,nargs)); % Ensure there are a valid number of inputs
+% Handle remaining inputs.
+% Should have 0 or 1 string input, 0 or 1 numeric input
+j = 0;
+k = 0;
+n = 50; % default value
+units = 'km'; % default value
+for i = 1:nargs
+    if ischar(args{i})
+        units = args{i};
+        j = j+1;
+    elseif isnumeric(args{i})
+        n = args{i};
+        k = k+1;
+    end
+end
+if j > 1 || k > 1
+    error('Invalid input types')
+end
+%% Calculations
+% Scale factors
+Scale = {'km' 'm'  'mile'            'miles'           'nm'              'au'                 'ft';
+         1    1000 0.621371192237334 0.621371192237334 0.539956803455724 6.6845871226706e-009 3280.839895};
+% Identify which scale to use
+try
+    myscale = 6378.1363*Scale{2,strcmpi(Scale(1,:),units)};
+catch %#ok<*CTCH>
+    error('Invalid units requested. Please use m, km, ft, mile, miles, nm, or AU')
+end
+     
+
+% -pi <= theta <= pi is a row vector.
+% -pi/2 <= phi <= pi/2 is a column vector.
+theta = (-n:2:n)/n*pi;
+phi = (-n:2:n)'/n*pi/2;
+cosphi = cos(phi); cosphi(1) = 0; cosphi(n+1) = 0;
+sintheta = sin(theta); sintheta(1) = 0; sintheta(n+1) = 0;
+x = myscale*cosphi*cos(theta);
+y = myscale*cosphi*sintheta;
+z = myscale*sin(phi)*ones(1,n+1);
+%% Plotting
+if nargout == 0
+    cax = newplot(cax);
+    % Load and define topographic data
+    load('topo.mat','topo','topomap1');
+    % Rotate data to be consistent with the Earth-Centered-Earth-Fixed
+    % coordinate conventions. X axis goes through the prime meridian.
+    % http://en.wikipedia.org/wiki/Geodetic_system#Earth_Centred_Earth_Fixed_.28ECEF_or_ECF.29_coordinates
+    %
+    % Note that if you plot orbit trajectories in the Earth-Centered-
+    % Inertial, the orientation of the contintents will be misleading.
+    topo2 = [topo(:,181:360) topo(:,1:180)]; %#ok<NODEF>
+    
+
+    % Define surface settings
+    props.FaceColor= 'texture';
+    props.EdgeColor = 'none';
+    props.FaceLighting = 'phong';
+    props.Cdata = topo2;
+    % Create the sphere with Earth topography and adjust colormap
+    surface(x,y,z,props,'parent',cax)
+    colormap(topomap1)
+% Replace the calls to surface and colormap with these lines if you do 
+% not want the Earth's topography displayed.
+%     surf(x,y,z,'parent',cax)
+%     shading flat
+%     colormap gray
+    
+
+    % Refine figure
+    axis equal
+    xlabel(['X [' units ']'])
+    ylabel(['Y [' units ']'])
+    zlabel(['Z [' units ']'])
+    view(127.5,30)
+else
+    xx = x; yy = y; zz = z;
+end
 end
