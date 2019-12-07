@@ -11,15 +11,15 @@ r_e = 6378;             %radius of the Earth (km)
 tspan = 100*24*3600 ; %sec
 options = odeset('RelTol', 1e-8, 'AbsTol', 1e-8) ;
 
-%% Iridium - Drag, N-Body, Oblateness, 
+%% Iridium - Drag, N-Body, Oblateness, SRP
 RI = [-4351.6; -5661.3; 15.3] ;
 VI = [.3814; -.2730; 7.4567] ;
 stateI = [RI VI] ;
 A_i = 19.25;   %m^2
 m_i = 860;  %kg
 
-%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6
-onoff = [1 1 1 1 1 1 1];
+%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6 (8)SRP
+onoff = [1 1 0 1 1 1 1 1];
 
 dt = 100 ; %time step in seconds 
 [RI2, VI2, tt, dcoesI] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
@@ -39,8 +39,8 @@ stateC = [RC VC] ;
 A_c = 40.48;  %m^2
 m_c = 1700;  %kg
 
-%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6
-onoff = [1 0 1 1 1 1 1];
+%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6 (8)SRP
+onoff = [1 0 1 1 1 1 1 1];
 
 dt = 100 ; %time step in seconds 
 [RC2, VC2, tt, dcoesC] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], dt, ...
@@ -61,8 +61,8 @@ stateR = [RR VR] ;
 A_r = 15.18;  %m^2
 m_r = 2200;  %kg
 
-%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6
-onoff = [1 1 0 1 1 1 1];
+%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6 (8)SRP
+onoff = [1 1 0 1 1 1 1 1 1];
 
 dt = 100 ; %time step in seconds 
 [RR2, VR2, tt, dcoesR] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], dt, ...
@@ -204,18 +204,24 @@ while ii < 10E5 && tt(ii) < tf
         2205*R_osc(3,ii)/r_osc(ii)^2 + 4851*R_osc(3,ii)^4/r_osc(ii)^4 -...
         3003*R_osc(3,ii)^6/r_osc(ii)^6);
 
-        %Total Perterbations    
+        %N-Body perterbations 
     a_n(:,ii) = ((mu_s*((Fs*rsun)-R(:,ii)))/(norm(Rss)^3) + ...
         (mu_J*((FJ*rJ)-R(:,ii)))/(norm(RssJ)^3) + ...
         (mu_V*((FV*rV)-R(:,ii)))/(norm(RssV)^3));
     
+        %SRP perterbations
+    sdw = shadowfunction(JDf,rsun,R_osc(:,ii));
+    a_srp(:,ii) = SolarRadiationPressure(R(:,ii),rsun,sdw,A_sc,m);
+    
+        %Total Perterbations
     ap(:,ii) = a_n(:,ii)*onoff(1) + ...
         a_drag(:,ii)*onoff(2) +...
         a_J2(:,ii)*onoff(3) + ...
         a_J3(:,ii)*onoff(4) + ...
         a_J4(:,ii)*onoff(5) + ...
         a_J5(:,ii)*onoff(6) + ...
-        a_J6(:,ii)*onoff(7);
+        a_J6(:,ii)*onoff(7) + ...
+        a_srp(:,ii)*onoff(8);
  
     q = dot(dr(:,ii),((2*R(:,ii))-dr(:,ii)))/(r(ii)^2) ; 
     F = (((q^2) - (3*q) + 3)/(1 + (1 - q)^(3/2))) * q ; 
@@ -590,6 +596,43 @@ end
 %Exponential Interpolation
 rho = r(i)*exp(-(z-h(i))/H(i));
 
+end
+
+%Solar Radiation Pressure
+function a_srp = SolarRadiationPressure(rsc,rsun,F,Asc,m)
+%inputs: radius from earth to sc, radius from earth to sun, shadow
+%       function, Area exposed to the sun (m^2)
+%outputs: acceleration due to SRP (km/s)
+
+%assumptions
+Psr = 4.57e-6;      %N/m^2
+Cr = 1.2;
+
+rrel = rsun - rsc;
+
+a_srp = -Psr*Cr*Asc/m * rrel/norm(rrel) * F * 10^-3;
+
+end
+
+%Shadow Function
+function F = shadowfunction(~,rsun,rsc)
+%inputs: Julian Date, position of spacecraft (ECI)
+%outputs: Shadow Function for SRP Effects Calculation
+
+    Rsun = norm(rsun);
+    Rsc = norm(rsc);
+    r_e = 6378;     %km
+    
+    theta = acosd((dot(rsc,rsun))/(Rsc*Rsun));
+    theta1 = acosd(r_e/Rsc);
+    theta2 = acosd(r_e/Rsun);
+    thetatot = theta1 + theta2;
+    
+    if thetatot <= theta  
+        F = 0;
+    else
+        F = 1;
+    end
 end
 
 function [xx,yy,zz] = earth_sphere(varargin)
