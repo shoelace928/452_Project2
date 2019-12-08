@@ -18,12 +18,56 @@ stateI = [RI VI] ;
 A_i = 19.25;   %m^2
 m_i = 860;  %kg
 
-%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6 (8)SRP
-onoff = [1 1 0 1 1 1 1 1];
-
+%Only Sun N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 0 0 1 1 1 1 1 1 1];
 dt = 100 ; %time step in seconds 
 [RI2, VI2, tt, dcoesI] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
     dt, tspan, mu_e, onoff, W, A_i, m_i, r_e)  ;
+
+%Sun + Jupiter N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 1 0 1 1 1 1 1 1 1];
+[RI2J, VI2J, tt, dcoesIJ] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e)  ;
+
+%Sun + Venus N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 0 1 1 1 1 1 1 1 1];
+[RI2V, VI2V, tt, dcoesIV] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e)  ;
+
+%Assigning COES
+incI = rad2deg(dcoesI(:,2));
+raanI = rad2deg(dcoesI(:,3));
+argI = rad2deg(dcoesI(:,4));
+
+incIJ = rad2deg(dcoesIJ(:,2));
+raanIJ = rad2deg(dcoesIJ(:,3));
+argIJ = rad2deg(dcoesIJ(:,4));
+
+incIV = rad2deg(dcoesIV(:,2));
+raanIV = rad2deg(dcoesIV(:,3));
+argIV = rad2deg(dcoesIV(:,4));
+
+dincI(1) = 0; dincIJ(1) = 0; dincIV(1) = 0;
+draanI(1) = 0; draanIJ(1) = 0; draanIV(1) = 0;
+dargI(1) = 0; dargIJ(1) = 0; dargIV(1) = 0;
+for jj = 2:length(tt)
+    
+    dincI(jj) = incI(jj) - incI(1);
+    draanI(jj) = raanI(jj) - raanI(1);
+    dargI(jj) = argI(jj) - argI(1);
+    
+    dincIJ(jj) = incIJ(jj) - incIJ(1);
+    draanIJ(jj) = raanIJ(jj) - raanIJ(1);
+    dargIJ(jj) = argIJ(jj) - argIJ(1);
+    
+    dincIV(jj) = incIV(jj) - incIV(1);
+    draanIV(jj) = raanIV(jj) - raanIV(1);
+    dargIV(jj) = argIV(jj) - argIV(1);
+    
+end
 
 figure(1)
 earth_sphere
@@ -32,6 +76,69 @@ plot3(RI2(1,:),RI2(2,:),RI2(3,:))
 grid on
 title('Iridium Propagation')
 
+figure(2)
+earth_sphere
+hold on
+plot3(RI2J(1,:),RI2J(2,:),RI2J(3,:))
+grid on
+title('Iridium Propagation (Jupiter incl)')
+
+figure(3)
+earth_sphere
+hold on
+plot3(RI2V(1,:),RI2V(2,:),RI2V(3,:))
+grid on
+title('Iridium Propagation (Venus incl)')
+
+figure(4)
+title('Iridium COES over time (SUN)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincI)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanI)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargI)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
+
+figure(5)
+title('Iridium COES over time (JUPITER)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincIJ)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanIJ)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargIJ)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
+
+figure(6)
+title('Iridium COES over time (VENUS)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincIV)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanIV)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargIV)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
+
+
 %% COSMOS - N-body, Oblateness, SRP 
 RC = [-10401; 39485; 10622] ;
 VC = [-2.9744; -.7741; -.0349] ;
@@ -39,19 +146,125 @@ stateC = [RC VC] ;
 A_c = 40.48;  %m^2
 m_c = 1700;  %kg
 
-%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6 (8)SRP
-onoff = [1 0 1 1 1 1 1 1];
-
+%Sun N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 1 1 0 1 1 1 1 1 1];
 dt = 100 ; %time step in seconds 
 [RC2, VC2, tt, dcoesC] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], dt, ...
     tspan, mu_e, onoff, W, A_c, m_c, r_e)  ;
 
-figure(2)
+%Sun + Jupiter N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 1 0 1 1 1 1 1 1 1];
+[RC2J, VC2J, tt, dcoesCJ] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_c, m_c, r_e)  ;
+
+%Sun + Venus N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 0 1 1 1 1 1 1 1 1];
+[RC2V, VC2V, tt, dcoesCV] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_c, m_c, r_e)  ;
+
+%Assigning COES
+incC = rad2deg(dcoesC(:,2));
+raanC = rad2deg(dcoesC(:,3));
+argC = rad2deg(dcoesC(:,4));
+
+incCJ = rad2deg(dcoesCJ(:,2));
+raanCJ = rad2deg(dcoesCJ(:,3));
+argCJ = rad2deg(dcoesCJ(:,4));
+
+incCV = rad2deg(dcoesCV(:,2));
+raanCV = rad2deg(dcoesCV(:,3));
+argCV = rad2deg(dcoesCV(:,4));
+
+dincC(1) = 0; dincCJ(1) = 0; dincCV(1) = 0;
+draanC(1) = 0; draanCJ(1) = 0; draanCV(1) = 0;
+dargC(1) = 0; dargCJ(1) = 0; dargCV(1) = 0;
+for jj = 2:length(tt)
+    
+    dincC(jj) = incC(jj) - incC(1);
+    draanC(jj) = raanC(jj) - raanC(1);
+    dargC(jj) = argC(jj) - argC(1);
+    
+    dincCJ(jj) = incCJ(jj) - incCJ(1);
+    draanCJ(jj) = raanCJ(jj) - raanCJ(1);
+    dargCJ(jj) = argCJ(jj) - argCJ(1);
+    
+    dincCV(jj) = incCV(jj) - incCV(1);
+    draanCV(jj) = raanCV(jj) - raanCV(1);
+    dargCV(jj) = argCV(jj) - argCV(1);
+    
+end
+
+figure(7)
 earth_sphere
 hold on
 plot3(RC2(1,:),RC2(2,:),RC2(3,:))
 grid on
-title('Iridium Propagation')
+title('Cosmos Propagation')
+
+figure(8)
+earth_sphere
+hold on
+plot3(RC2J(1,:),RC2J(2,:),RC2J(3,:))
+grid on
+title('Cosmos Propagation')
+
+figure(9)
+earth_sphere
+hold on
+plot3(RC2V(1,:),RC2V(2,:),RC2V(3,:))
+grid on
+title('Cosmos Propagation')
+
+figure(10)
+title('Cosmos COES over time (SUN)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincC)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanC)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargC)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
+
+figure(11)
+title('Cosmos COES over time (SUN)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincCJ)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanCJ)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargCJ)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
+
+figure(12)
+title('Cosmos COES over time (SUN)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincCV)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanCV)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargCV)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
 
 %% RADARSAT-2 - N-Body, Oblateness, SRP, Drag
 RR = [-2213.2 88.2 6819.2]';
@@ -61,20 +274,125 @@ stateR = [RR VR] ;
 A_r = 15.18;  %m^2
 m_r = 2200;  %kg
 
-%(1)N-Body (2)Drag (3)J2 (4)J3 (5)J4 (6)J5 (7)J6 (8)SRP
-onoff = [1 1 0 1 1 1 1 1 1];
-
+%Sun N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 1 1 1 1 1 1 1 1 1 1];
 dt = 100 ; %time step in seconds 
 [RR2, VR2, tt, dcoesR] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], dt, ...
     tspan, mu_e, onoff, W, A_r, m_r, r_e)  ;
 
-figure(3)
+%Sun + Jupiter N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 1 0 1 1 1 1 1 1 1];
+[RR2J, VR2J, tt, dcoesRJ] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_r, m_r, r_e)  ;
+
+%Sun + Venus N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
+onoff = [1 0 1 1 1 1 1 1 1 1];
+[RR2V, VR2V, tt, dcoesRV] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_r, m_r, r_e)  ;
+
+%Assigning COES
+incR = rad2deg(dcoesR(:,2));
+raanR = rad2deg(dcoesR(:,3));
+argR = rad2deg(dcoesR(:,4));
+
+incRJ = rad2deg(dcoesRJ(:,2));
+raanRJ = rad2deg(dcoesRJ(:,3));
+argRJ = rad2deg(dcoesRJ(:,4));
+
+incRV = rad2deg(dcoesRV(:,2));
+raanRV = rad2deg(dcoesRV(:,3));
+argRV = rad2deg(dcoesRV(:,4));
+
+dincR(1) = 0; dincRJ(1) = 0; dincRV(1) = 0;
+draanR(1) = 0; draanRJ(1) = 0; draanRV(1) = 0;
+dargR(1) = 0; dargRJ(1) = 0; dargRV(1) = 0;
+for jj = 2:length(tt)
+    
+    dincR(jj) = incR(jj) - incR(1);
+    draanR(jj) = raanR(jj) - raanR(1);
+    dargR(jj) = argR(jj) - argR(1);
+    
+    dincRJ(jj) = incRJ(jj) - incRJ(1);
+    draanRJ(jj) = raanRJ(jj) - raanRJ(1);
+    dargRJ(jj) = argR(jj) - argRJ(1);
+    
+    dincRV(jj) = incRV(jj) - incRV(1);
+    draanRV(jj) = raanRV(jj) - raanRV(1);
+    dargRV(jj) = argRV(jj) - argRV(1);
+    
+end
+
+figure(13)
 earth_sphere
 hold on
 plot3(RR2(1,:),RR2(2,:),RR2(3,:))
 grid on
-title('Iridium Propagation')
+title('RadarSat-2 Propagation')
 
+figure(14)
+earth_sphere
+hold on
+plot3(RR2J(1,:),RR2J(2,:),RR2J(3,:))
+grid on
+title('RadarSat-2 Propagation')
+
+figure(15)
+earth_sphere
+hold on
+plot3(RR2V(1,:),RR2V(2,:),RR2V(3,:))
+grid on
+title('RadarSat-2 Propagation')
+
+figure(16)
+title('RadarSat-2 COES over time (SUN)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincR)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanR)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargR)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
+
+figure(17)
+title('RadarSat-2 COES over time (SUN)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincRJ)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanRJ)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargRJ)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
+
+figure(18)
+title('RadarSat-2 COES over time (SUN)')
+subplot(3,1,1)
+plot(tt/(24*3600),dincRV)
+xlabel('time (days)')
+ylabel('Inclination (deg)')
+grid on
+subplot(3,1,2)
+plot(tt/(24*3600),draanRV)
+xlabel('time (days)')
+ylabel('RAAN (deg)')
+subplot(3,1,3)
+plot(tt/(24*3600),dargRV)
+xlabel('time (days)')
+ylabel('Argument of Perigee (deg)')
 
 %% Functions: 
     %Enckes Method With Perturbations -- N Body -- Drag -- J2-6
@@ -98,11 +416,11 @@ while ii < 10E5 && tt(ii) < tf
     dv(:,1) = dvo ; 
 
         %J Constants
-    J2 = 0.00108263;
-    J3 = (-2.53266e-6)*J2;
-    J4 = (-1.619e-6)*J2;
-    J5 = (-2.273e-7)*J2;
-    J6 = (5.407e-7)*J2; 
+    J2 = -0.00108263;
+    J3 = 2.53266e-6;
+    J4 = 1.619e-6;
+    J5 = 2.273e-7;
+    J6 = -5.407e-7; 
     
         %Julian Date Calculation   
     JDo = 2451838 ; %initial start time 
@@ -205,23 +523,25 @@ while ii < 10E5 && tt(ii) < tf
         3003*R_osc(3,ii)^6/r_osc(ii)^6);
 
         %N-Body perterbations 
-    a_n(:,ii) = ((mu_s*((Fs*rsun)-R(:,ii)))/(norm(Rss)^3) + ...
-        (mu_J*((FJ*rJ)-R(:,ii)))/(norm(RssJ)^3) + ...
-        (mu_V*((FV*rV)-R(:,ii)))/(norm(RssV)^3));
+    a_nS(:,ii) = (mu_s*((Fs*rsun)-R(:,ii)))/(norm(Rss)^3);
+    a_nJ(:,ii) = (mu_J*((FJ*rJ)-R(:,ii)))/(norm(RssJ)^3);
+    a_nV(:,ii) = (mu_V*((FV*rV)-R(:,ii)))/(norm(RssV)^3);
     
         %SRP perterbations
     sdw = shadowfunction(JDf,rsun,R_osc(:,ii));
     a_srp(:,ii) = SolarRadiationPressure(R(:,ii),rsun,sdw,A_sc,m);
     
         %Total Perterbations
-    ap(:,ii) = a_n(:,ii)*onoff(1) + ...
-        a_drag(:,ii)*onoff(2) +...
-        a_J2(:,ii)*onoff(3) + ...
-        a_J3(:,ii)*onoff(4) + ...
-        a_J4(:,ii)*onoff(5) + ...
-        a_J5(:,ii)*onoff(6) + ...
-        a_J6(:,ii)*onoff(7) + ...
-        a_srp(:,ii)*onoff(8);
+    ap(:,ii) = a_nS(:,ii)*onoff(1) + ...
+        a_nJ(:,ii)*onoff(2) + ...
+        a_nV(:,ii)*onoff(3) + ...
+        a_drag(:,ii)*onoff(4) + ...
+        a_J2(:,ii)*onoff(5) + ...
+        a_J3(:,ii)*onoff(6) + ...
+        a_J4(:,ii)*onoff(7) + ...
+        a_J5(:,ii)*onoff(8) + ...
+        a_J6(:,ii)*onoff(9) + ...
+        a_srp(:,ii)*onoff(10);
  
     q = dot(dr(:,ii),((2*R(:,ii))-dr(:,ii)))/(r(ii)^2) ; 
     F = (((q^2) - (3*q) + 3)/(1 + (1 - q)^(3/2))) * q ; 
