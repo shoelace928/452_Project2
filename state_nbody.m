@@ -1,6 +1,15 @@
 %% Notes to self
 
-%Add SRP Perterbations
+%Ask Dr. A:
+% Method for delta-v calcs - does this seem like a good aapproach?
+
+% Getting high numbers for delta-v burns? (~28 km/s each correction)
+% Burn values are varying and that doesn't make sense?
+% Good time step for corrections? (day vs period)
+
+% Part c - is it fine to just do a delta-v calc for an inc/raan change and 
+% talk about how you don't need to do that burn for sun synchronous orbits 
+% or is that not enough?
 
 %% Part 1 - Propagation
 
@@ -8,7 +17,7 @@ clear all; close all; clc;
 mu_e = 398600 ; 
 W = [0 0 72.9211e-6]';  %angular velocity of the earth (rad/s)
 r_e = 6378;             %radius of the Earth (km)
-tspan = 100*24*3600 ; %sec
+tspan = 7*24*3600 ; %sec
 options = odeset('RelTol', 1e-8, 'AbsTol', 1e-8) ;
 
 %% Iridium - Drag, N-Body, Oblateness, SRP
@@ -17,25 +26,29 @@ VI = [.3814; -.2730; 7.4567] ;
 stateI = [RI VI] ;
 A_i = 19.25;   %m^2
 m_i = 860;  %kg
+TI = 6.004910595e3 ;   %period, seconds
 
 %Only Sun N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 0 0 1 1 1 1 1 1 1];
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 0 0 1 1 1 1 1 1 1 0];
 dt = 100 ; %time step in seconds 
-[RI2, VI2, tt, dcoesI] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
-    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e)  ;
+[RI2, VI2, tt, dcoesI, ~] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e, TI)  ;
 
 %Sun + Jupiter N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 1 0 1 1 1 1 1 1 1];
-[RI2J, VI2J, tt, dcoesIJ] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
-    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e)  ;
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 1 0 1 1 1 1 1 1 1 0];
+[RI2J, VI2J, tt, dcoesIJ, ~] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e, TI)  ;
 
 %Sun + Venus N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 0 1 1 1 1 1 1 1 1];
-[RI2V, VI2V, tt, dcoesIV] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
-    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e)  ;
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 0 1 1 1 1 1 1 1 1 0];
+[RI2V, VI2V, tt, dcoesIV, ~] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e, TI)  ;
 
 %Assigning COES
 incI = rad2deg(dcoesI(:,2));
@@ -68,6 +81,9 @@ for jj = 2:length(tt)
     dargIV(jj) = argIV(jj) - argIV(1);
     
 end
+
+% aI = (dcoesI(1,6) + dcoesI(1,7))/2;
+% TI = 2*pi/sqrt(mu_e) * aI^1.5;    %period (seconds)
 
 figure(1)
 earth_sphere
@@ -138,6 +154,13 @@ plot(tt/(24*3600),dargIV)
 xlabel('time (days)')
 ylabel('Argument of Perigee (deg)')
 
+%delta-v calc:
+RI2_end = [RI2(1,end);RI2(2,end);RI2(3,end)] ;
+VI2_end = [VI2(1,end);VI2(2,end);VI2(3,end)] ;
+[VI3, VI3_prime] = lambert(RI,RI2_end,TI) ;
+burnI1 = VI3 - VI2_end ;
+burnI2 = VI - VI3_prime ;
+dVI = norm(burnI1) + norm(burnI2) ; 
 
 %% COSMOS - N-body, Oblateness, SRP 
 RC = [-10401; 39485; 10622] ;
@@ -147,23 +170,26 @@ A_c = 40.48;  %m^2
 m_c = 1700;  %kg
 
 %Sun N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 1 1 0 1 1 1 1 1 1];
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 1 1 0 1 1 1 1 1 1 0];
 dt = 100 ; %time step in seconds 
-[RC2, VC2, tt, dcoesC] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], dt, ...
-    tspan, mu_e, onoff, W, A_c, m_c, r_e)  ;
+[RC2, VC2, tt, dcoesC, ~] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], dt, ...
+    tspan, mu_e, onoff, W, A_c, m_c, r_e, TI)  ;
 
 %Sun + Jupiter N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 1 0 1 1 1 1 1 1 1];
-[RC2J, VC2J, tt, dcoesCJ] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], ...
-    dt, tspan, mu_e, onoff, W, A_c, m_c, r_e)  ;
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 1 0 1 1 1 1 1 1 1 0];
+[RC2J, VC2J, tt, dcoesCJ, ~] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_c, m_c, r_e, TI)  ;
 
 %Sun + Venus N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 0 1 1 1 1 1 1 1 1];
-[RC2V, VC2V, tt, dcoesCV] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], ...
-    dt, tspan, mu_e, onoff, W, A_c, m_c, r_e)  ;
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 0 1 1 1 1 1 1 1 1 0];
+[RC2V, VC2V, tt, dcoesCV, ~] = enckesnb(RC, RC, VC, VC, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_c, m_c, r_e, TI)  ;
 
 %Assigning COES
 incC = rad2deg(dcoesC(:,2));
@@ -196,6 +222,9 @@ for jj = 2:length(tt)
     dargCV(jj) = argCV(jj) - argCV(1);
     
 end
+
+aC = (dcoesC(1,6) + dcoesC(1,7))/2;
+TC = 2*pi/sqrt(mu_e) * aC^1.5;    %period (seconds)
 
 figure(7)
 earth_sphere
@@ -266,6 +295,14 @@ plot(tt/(24*3600),dargCV)
 xlabel('time (days)')
 ylabel('Argument of Perigee (deg)')
 
+%delta-v calc:
+RC2_end = [RC2(1,end);RC2(2,end);RC2(3,end)] ;
+VC2_end = [VC2(1,end);VC2(2,end);VC2(3,end)] ;
+[VC3, VC3_prime] = lambert(RC,RC2_end,TC) ;
+burnC1 = VC3 - VC2_end ;
+burnC2 = VC - VC3_prime ;
+dVC = norm(burnC1) + norm(burnC2) ; 
+
 %% RADARSAT-2 - N-Body, Oblateness, SRP, Drag
 RR = [-2213.2 88.2 6819.2]';
 VR = [-6.0621 3.8439 -2.0172]';
@@ -275,23 +312,26 @@ A_r = 15.18;  %m^2
 m_r = 2200;  %kg
 
 %Sun N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 1 1 1 1 1 1 1 1 1 1];
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 1 1 1 1 1 1 1 1 1 1 0];
 dt = 100 ; %time step in seconds 
-[RR2, VR2, tt, dcoesR] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], dt, ...
-    tspan, mu_e, onoff, W, A_r, m_r, r_e)  ;
+[RR2, VR2, tt, dcoesR, ~] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], dt, ...
+    tspan, mu_e, onoff, W, A_r, m_r, r_e, TI)  ;
 
 %Sun + Jupiter N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 1 0 1 1 1 1 1 1 1];
-[RR2J, VR2J, tt, dcoesRJ] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], ...
-    dt, tspan, mu_e, onoff, W, A_r, m_r, r_e)  ;
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 1 0 1 1 1 1 1 1 1 0];
+[RR2J, VR2J, tt, dcoesRJ, ~] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_r, m_r, r_e, TI)  ;
 
 %Sun + Venus N-Body
-%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6 (10)SRP
-onoff = [1 0 1 1 1 1 1 1 1 1];
-[RR2V, VR2V, tt, dcoesRV] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], ...
-    dt, tspan, mu_e, onoff, W, A_r, m_r, r_e)  ;
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 0 1 1 1 1 1 1 1 1 0];
+[RR2V, VR2V, tt, dcoesRV, ~] = enckesnb(RR, RR, VR, VR, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_r, m_r, r_e, TI)  ;
 
 %Assigning COES
 incR = rad2deg(dcoesR(:,2));
@@ -324,6 +364,9 @@ for jj = 2:length(tt)
     dargRV(jj) = argRV(jj) - argRV(1);
     
 end
+
+aR = (dcoesR(1,6) + dcoesR(1,7))/2;
+TR = 2*pi/sqrt(mu_e) * aR^1.5;    %period (seconds)
 
 figure(13)
 earth_sphere
@@ -394,10 +437,33 @@ plot(tt/(24*3600),dargRV)
 xlabel('time (days)')
 ylabel('Argument of Perigee (deg)')
 
+%delta-v calc:
+RR2_end = [RR2(1,end);RR2(2,end);RR2(3,end)] ;
+VR2_end = [VR2(1,end);VR2(2,end);VR2(3,end)] ;
+[VR3, VR3_prime] = lambert(RR,RR2_end,TR) ;
+burnR1 = VR3 - VR2_end ;
+burnR2 = VR - VR3_prime ;
+dVR = norm(burnR1) + norm(burnR2) ; 
+
+%% Part 2 - Daily Corrections for Iridium Spacecraft
+
+%Only Sun N-Body
+%(1-3)N-Body(Sun-Jupiter-Venus) (4)Drag (5)J2 (6)J3 (7)J4 (8)J5 (9)J6
+%(10)SRP (11)Daily Corrections
+onoff = [1 0 0 1 1 1 1 1 1 1 1];
+dt = 100 ; %time step in seconds 
+[RI22, VI22, tt, dcoesI2, burn2] = enckesnb(RI, RI, VI, VI, [0;0;0], [0;0;0], ...
+    dt, tspan, mu_e, onoff, W, A_i, m_i, r_e, TI)  ;
+
+ind = find(burn2);
+
+burn_2 = burn2(ind);
+totburn = sum(burn_2);
+
 %% Functions: 
-    %Enckes Method With Perturbations -- N Body -- Drag -- J2-6
-function [R, V, tt, dcoes] = enckesnb(R, R_osc, V, V_osc, dro, dvo, dt, tf, ...
-    mu_e, onoff, omega_e, A_sc, m, r_e)  
+    %Enckes Method With Perturbations -- N Body -- Drag -- J2-6 -- SRP
+function [R, V, tt, dcoes, burn] = enckesnb(R, R_osc, V, V_osc, dro, dvo, dt, tf, ...
+    mu_e, onoff, omega_e, A_sc, m, r_e,TI)  
 ii = 1; 
 tt(ii) = 0 ;  
 rectify = 1 ; 
@@ -480,11 +546,6 @@ while ii < 10E5 && tt(ii) < tf
         ((5*R_osc(3,ii)^2)/r_osc(ii)^2));
     a_J2(3,ii) = -(3*J2*mu_e*r_e^2*R_osc(3,ii))/(2*r_osc(ii)^5)*(3 - ...
         ((5*R_osc(3,ii)^2)/r_osc(ii)^2));
-%     temp = -((3*J2*mu_e*(r_e^2))/(2*r_osc(ii)^5)); 
-%     aI = temp*R_osc(1,ii)*(1 - ((5*R_osc(3,ii)^2)/(r_osc(ii)^2)));
-%     aJ = temp*R_osc(2,ii)*(1 - ((5*R_osc(3,ii)^2)/(r_osc(ii)^2)));
-%     aK = temp*R_osc(3,ii)*(3 - ((5*R_osc(3,ii)^2)/(r_osc(ii)^2)));
-%     a_J2(:,ii) = [aI , aJ , aK]';
 
     %J3 perterbations
     a_J3(1,ii) = -(5*J3*mu_e*r_e^3*R_osc(1,ii)/(2*r_osc(ii)^7))*(3*R_osc(3,ii) ...
@@ -564,8 +625,46 @@ while ii < 10E5 && tt(ii) < tf
      break  
  end 
 
+burn(ii) = 0;
+%Burn corrections for Iridium (Part 2)
+if onoff(11) == 1
+    
+    %seconds in each period for a week
+%     time = linspace(1,100)*(90*60);
+    time = [1 2 3 4 5 6 7]*24*3600;     %once per day for a week
+
+    for jj = 1:length(time)
+        if tt(ii) == time(jj)
+            
+            %propogating to find ideal location using ODE
+            options = odeset('RelTol',1e-8,'AbsTol',1e-8);
+            tspan = [0 tt+3*TI/4];
+            [statenewdvf] = ode45(@Aero351twobodymotion,tspan,[R(:,1)' V(:,1)'],options,mu_e);
+            
+            %desired R and V vectors after burn
+            Rdvf = statenewdvf.y(1:3,end);
+            Vdvf = statenewdvf.y(4:6,end);
+                    
+            %finding delta-v's for lamberts
+            [v1,v2] = retrolambert(Rdvf,R_osc(:,ii),3*TI/4);
+            dv1I(:,ii) = v1 - V_osc(:,ii);
+            dv2I(:,ii) = Vdvf - v2;
+            burn(ii) = norm(dv1I(:,ii)) + norm(dv2I(:,ii));
+            
+        end
+        
+        %reassigning R vector for post-Lamberts burn
+        if tt(ii) == time(jj)+3*TI/4
+            R(:,ii) = Rdvf;
+            V(:,ii) = Vdvf;
+        end
+    end
+else
+    burn(ii) = 0;
+end
+
 ii = ii + 1 ; 
- 
+
 end
 
     for mm = 1:length(R(1,:)) 
@@ -1069,4 +1168,152 @@ if nargout == 0
 else
     xx = x; yy = y; zz = z;
 end
+end
+
+%Lacey Davis
+%Lambert's problem for orbits 
+function [v1,v2] = lambert(r1,r2, delta_t_given)
+%given r1 and r2, solve for v1 and v2
+mu = 398600 ;
+r1_mag = norm(r1)   ;
+r2_mag = norm(r2)   ;
+crossy = cross(r1,r2) ;
+z_comp = crossy(3)   ;
+    if z_comp >= 0 
+        delta_theta = acos(dot(r1,r2)/(r1_mag*r2_mag)) ; 
+    else
+        delta_theta = (2*pi) - acos(dot(r1,r2)/(r1_mag*r2_mag)) ;
+    end 
+A = sin(delta_theta)*sqrt((r1_mag*r2_mag)/(1-cos(delta_theta))) ; 
+    if A == 0
+        disp('the constant is zero')
+    end
+    
+%z guess bounds and initial conditions
+z = 0 ;
+zupper = 4*pi^2 ;
+zlower = -4*pi^2 ;
+ii = 1 ;
+delta_t_loop = 10000000 ;
+TOL = 10e-8 ;
+    %Z VALUE THROUGH BISECTION METHOD
+while abs(delta_t_loop - delta_t_given) > TOL 
+    %STUMPFF FUNCTIONS
+    if z(ii)>0 
+        S = ((sqrt(z(ii))) - sin(sqrt(z(ii))))/((sqrt(z(ii)))^3) ;
+        C = (1 - cos(sqrt(z(ii))))/z(ii) ;
+    elseif z<0
+        S = (sinh(sqrt(-z(ii))) - sqrt(-z(ii)))/((sqrt(-z(ii))^3)) ; 
+        C = (cosh(sqrt(-z(ii))) - 1)/-z(ii) ;
+    else
+        S = 1/6 ;
+        C = 1/2 ;
+    end 
+    
+    %y, chi, delta_t_loop
+    y = r1_mag + r2_mag + ((A*((z*S)-1))/sqrt(C)) ;
+    chi = sqrt(y/C) ;  
+    delta_t_loop = (((y/C)^(3/2)*S) + (A*sqrt(y)))/sqrt(mu) ;
+    
+    if delta_t_loop < delta_t_given 
+        zlower = z ;
+        z = (zupper+zlower)/2 ;
+    else
+        zupper = z ;
+        z = (zupper+zlower)/2 ; 
+    end   
+end 
+
+%lagrange multipliers
+f = 1 - (y/r1_mag) ;
+g = A*(sqrt(y/mu)) ;
+g_dot = 1 - (y/r2_mag) ;
+f_dot = ((f*g_dot) - 1) / g ;
+
+%v1 and v2 
+v1 = (1/g)*(r2-(f*r1)) ;
+v2 = (f_dot*r1) + (g_dot*v1) ;
+
+end 
+
+function [v1,v2] = retrolambert(r1,r2, delta_t_given)
+%given r1 and r2, solve for v1 and v2
+mu = 398600 ;
+r1_mag = norm(r1)   ;
+r2_mag = norm(r2)   ;
+crossy = cross(r1,r2) ;
+z_comp = crossy(3)   ;
+    if z_comp >= 0 
+         delta_theta = (2*pi) - acos(dot(r1,r2)/(r1_mag*r2_mag)) ;
+    else
+        delta_theta = acos(dot(r1,r2)/(r1_mag*r2_mag)) ;
+       
+    end 
+A = sin(delta_theta)*sqrt((r1_mag*r2_mag)/(1-cos(delta_theta))) ; 
+    if A == 0
+        disp('the constant is zero')
+    end
+    
+%z guess bounds and initial conditions
+z = 0 ;
+zupper = 4*pi^2 ;
+zlower = -4*pi^2 ;
+ii = 1 ;
+delta_t_loop = 10000000 ;
+TOL = 10e-8 ;
+    %Z VALUE THROUGH BISECTION METHOD
+while abs(delta_t_loop - delta_t_given) > TOL 
+    %STUMPFF FUNCTIONS
+    if z(ii)>0 
+        S = ((sqrt(z(ii))) - sin(sqrt(z(ii))))/((sqrt(z(ii)))^3) ;
+        C = (1 - cos(sqrt(z(ii))))/z(ii) ;
+    elseif z<0
+        S = (sinh(sqrt(-z(ii))) - sqrt(-z(ii)))/((sqrt(-z(ii))^3)) ; 
+        C = (cosh(sqrt(-z(ii))) - 1)/-z(ii) ;
+    else
+        S = 1/6 ;
+        C = 1/2 ;
+    end 
+    
+    %y, chi, delta_t_loop
+    y = r1_mag + r2_mag + ((A*((z*S)-1))/sqrt(C)) ;
+    chi = sqrt(y/C) ;  
+    delta_t_loop = (((y/C)^(3/2)*S) + (A*sqrt(y)))/sqrt(mu) ;
+    
+    if delta_t_loop < delta_t_given 
+        zlower = z ;
+        z = (zupper+zlower)/2 ;
+    else
+        zupper = z ;
+        z = (zupper+zlower)/2 ; 
+    end   
+end 
+
+%lagrange multipliers
+f = 1 - (y/r1_mag) ;
+g = A*(sqrt(y/mu)) ;
+g_dot = 1 - (y/r2_mag) ;
+f_dot = ((f*g_dot) - 1) / g ;
+
+%v1 and v2 
+v1 = (1/g)*(r2-(f*r1)) ;
+v2 = (f_dot*r1) + (g_dot*v1) ;
+
+end 
+
+%Linear Motion ODE
+function dstatedt = Aero351twobodymotion(t,state,mue)
+
+dx = state(4);
+dy = state(5);
+dz = state(6);
+
+r = norm([state(1) state(2) state(3)]);
+
+ddx = -mue*state(1)/r^3;
+ddy = -mue*state(2)/r^3;
+ddz = -mue*state(3)/r^3;
+
+dstatedt = [dx;dy;dz;ddx;ddy;ddz];
+
 end
